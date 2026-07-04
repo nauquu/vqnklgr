@@ -318,10 +318,7 @@ def send_telegram_document(path):
 def get_control_keyboard():
     return {
         "keyboard": [
-            [{"text": "/status"}, {"text": "/webcam"}],
-            [{"text": "/browser"}, {"text": "/clear"}],
-            [{"text": "/interval"}, {"text": "/name"}],
-            [{"text": "/help"}]
+            [{"text": "/status"}, {"text": "/help"}]
         ],
         "resize_keyboard": True,
         "one_time_keyboard": False
