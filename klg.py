@@ -930,6 +930,19 @@ def answer_callback_query(callback_query_id):
 def poll_telegram():
     state = load_state()
     offset = state.get("telegram_offset", 0)
+    
+    # If starting fresh (offset is 0), clear old updates to avoid executing old commands
+    if offset == 0:
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset=-1&limit=1"
+            resp = requests.get(url, timeout=10).json()
+            results = resp.get("result", [])
+            if results:
+                offset = results[0]["update_id"] + 1
+                update_state(telegram_offset=offset)
+        except Exception as e:
+            log_message(f"Error clearing initial updates: {e}")
+
     while True:
         try:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=10"
