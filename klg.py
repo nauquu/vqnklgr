@@ -515,8 +515,7 @@ def check_clipboard_async():
     clipboard_content = get_clipboard()
     if clipboard_content and clipboard_content != last_clipboard:
         # Ignore clipboard copying if the text length exceeds 2000 characters
-        if len(clipboard_content) > 2000:
-            log_message(f"Clipboard copy ignored: content too long ({len(clipboard_content)} characters)")
+        if len(clipboard_content) > 500:
             return
             
         last_clipboard = clipboard_content
