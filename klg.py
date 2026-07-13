@@ -869,6 +869,7 @@ def execute_command(command, message=None):
                     {"text": "🏷️ Đổi tên", "callback_data": f"name @{my_name}"}
                 ],
                 [
+                    {"text": "🔄 Cập nhật", "callback_data": f"update @{my_name}"},
                     {"text": "💥 Tự hủy", "callback_data": f"destruct @{my_name}"}
                 ]
             ]
@@ -878,10 +879,18 @@ def execute_command(command, message=None):
             reply_markup=inline_kb
         )
 
-    elif cmd in ["/update", "update"] and message and "document" in message:
-        if message["document"]["file_name"].endswith(".exe"):
-            send_telegram_message("🔄 Đang cập nhật .exe...")
-            self_update(message["document"]["file_id"])
+    elif cmd in ["/update", "update"]:
+        if message and "document" in message:
+            if message["document"]["file_name"].endswith(".exe"):
+                send_telegram_message("🔄 Đang cập nhật .exe...")
+                self_update(message["document"]["file_id"])
+        else:
+            send_telegram_message(
+                f"<b>🔄 Hướng dẫn cập nhật .exe cho [{machine}]:</b>\n\n"
+                f"Vui lòng gửi file <code>.exe</code> mới trực tiếp vào cuộc trò chuyện này, "
+                f"và nhập phần chú thích (caption) đính kèm là:\n"
+                f"<code>/update @{my_name}</code>"
+            )
 
     elif cmd.startswith("/interval") or cmd.startswith("interval"):
         parts = command.strip().split()
