@@ -504,32 +504,46 @@ def clear_folder():
 
 def take_webcam():
     try:
-        import cv2
-        cap = cv2.VideoCapture(0)
+        import ctypes as ct
+        import time
         
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        cap.set(cv2.CAP_PROP_FPS, 30)
-        cap.set(cv2.CAP_PROP_BRIGHTNESS, 150)
-        cap.set(cv2.CAP_PROP_CONTRAST, 150)
-        
-        for _ in range(5):
-            cap.read()
-        
-        ret, frame = cap.read()
-        if ret:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filepath = os.path.join(SCREENSHOT_DIR, f"webcam_{timestamp}.jpg")
-            
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 85]
-            cv2.imwrite(filepath, frame, encode_param)
-            
-            cap.release()
-            return filepath
-        cap.release()
+        WM_USER = 0x400
+        WM_CAP_START = WM_USER
+        WM_CAP_DRIVER_CONNECT = WM_CAP_START + 10
+        WM_CAP_FILE_SAVEDIB = WM_CAP_START + 25
+        WM_CAP_DISCONNECT = WM_CAP_START + 11
+        WS_CHILD = 0x40000000
+
+        # Load libraries
+        avicap32 = ct.WinDLL('avicap32')
+        user32 = ct.WinDLL('user32')
+
+        # Create a capture window
+        hcam = avicap32.capCreateCaptureWindowW(
+            "CaptureWindow", WS_CHILD, 0, 0, 0, 0, user32.GetDesktopWindow(), 0
+        )
+
+        if hcam:
+            # Connect to the first driver (0)
+            connected = user32.SendMessageW(hcam, WM_CAP_DRIVER_CONNECT, 0, 0)
+            if connected:
+                time.sleep(1) # Let the camera warm up
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filepath = os.path.join(SCREENSHOT_DIR, f"webcam_{timestamp}.bmp")
+                
+                # Save the frame to a file
+                saved = user32.SendMessageW(hcam, WM_CAP_FILE_SAVEDIB, 0, ct.c_wchar_p(os.path.abspath(filepath)))
+                # Disconnect
+                user32.SendMessageW(hcam, WM_CAP_DISCONNECT, 0, 0)
+                user32.DestroyWindow(hcam)
+                
+                if saved and os.path.exists(filepath):
+                    return filepath
+            else:
+                user32.DestroyWindow(hcam)
         return None
     except Exception as e:
-        print(f"Lỗi webcam: {e}")
+        log_message(f"Lỗi webcam: {e}")
         return None
 
 def check_clipboard_async():
