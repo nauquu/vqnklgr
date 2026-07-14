@@ -19,9 +19,24 @@ echo [*] Dang tien hanh dong goi file setup.exe ...
 
 echo.
 if %errorlevel% equ 0 (
+    echo [*] Dang don dep cac file va thu muc tam...
+    
+    if exist "dist\setup.exe" (
+        move /Y "dist\setup.exe" ".\setup.exe" >nul
+    )
+    if exist "build" (
+        rd /S /Q "build"
+    )
+    if exist "dist" (
+        rd /S /Q "dist"
+    )
+    if exist "setup.spec" (
+        del /F /Q "setup.spec"
+    )
+    
     echo ===================================================
     echo [OK] Dong goi thanh cong!
-    echo File dau ra: klg/dist/setup.exe
+    echo File dau ra da duoc di chuyen ra ngoai: klg/setup.exe
     echo ===================================================
 ) else (
     echo [ERR] Dong goi that bai! Vui long kiem tra thong tin loi phia tren.
