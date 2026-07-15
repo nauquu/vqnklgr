@@ -339,6 +339,7 @@ def setup_bot_commands():
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMyCommands"
         commands = [
+            {"command": "list", "description": "Liệt kê danh sách các máy đang hoạt động"},
             {"command": "status", "description": "Xem trạng thái và Bảng điều khiển các máy"},
             {"command": "help", "description": "Hướng dẫn sử dụng chi tiết"}
         ]
@@ -862,6 +863,23 @@ def execute_command(command, message=None):
         clear_folder()
         send_telegram_message("🗑️ Đã xóa log và ảnh")
     
+    elif cmd in ["/list", "list"]:
+        state = load_state()
+        machine = state.get("machine_name") or os.environ.get('COMPUTERNAME', 'Unknown-PC')
+        my_name = machine.lower()
+        
+        inline_kb = {
+            "inline_keyboard": [
+                [
+                    {"text": f"💻 {machine}", "callback_data": f"status @{my_name}"}
+                ]
+            ]
+        }
+        send_telegram_message(
+            "Thiết bị đang hoạt động:",
+            reply_markup=inline_kb
+        )
+
     elif cmd in ["/status", "status"]:
         state = load_state()
         machine = state.get("machine_name") or os.environ.get('COMPUTERNAME', 'Unknown-PC')
