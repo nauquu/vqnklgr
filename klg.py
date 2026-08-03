@@ -535,47 +535,42 @@ def capture_all_screens():
 
         gdi32.SelectObject(hdc_mem, hold)
 
-        class BITMAPINFOHEADER(ctypes.Structure):
+        gdiplus = ctypes.windll.gdiplus
+
+        class GdiplusStartupInput(ctypes.Structure):
             _fields_ = [
-                ('biSize', wintypes.DWORD),
-                ('biWidth', wintypes.LONG),
-                ('biHeight', wintypes.LONG),
-                ('biPlanes', wintypes.WORD),
-                ('biBitCount', wintypes.WORD),
-                ('biCompression', wintypes.DWORD),
-                ('biSizeImage', wintypes.DWORD),
-                ('biXPelsPerMeter', wintypes.LONG),
-                ('biYPelsPerMeter', wintypes.LONG),
-                ('biClrUsed', wintypes.DWORD),
-                ('biClrImportant', wintypes.DWORD)
+                ('GdiplusVersion', ctypes.c_uint32),
+                ('DebugEventCallback', ctypes.c_void_p),
+                ('SuppressBackgroundThread', ctypes.c_int32),
+                ('SuppressExternalCodecs', ctypes.c_int32)
             ]
 
-        bmi = BITMAPINFOHEADER()
-        bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-        bmi.biWidth = total_width
-        bmi.biHeight = -total_height
-        bmi.biPlanes = 1
-        bmi.biBitCount = 24
-        bmi.biCompression = 0
+        class CLSID(ctypes.Structure):
+            _fields_ = [
+                ('Data1', ctypes.c_ulong),
+                ('Data2', ctypes.c_ushort),
+                ('Data3', ctypes.c_ushort),
+                ('Data4', ctypes.c_byte * 8)
+            ]
 
-        buffer_size = total_width * total_height * 3
-        buffer = ctypes.create_string_buffer(buffer_size)
+        token = ctypes.c_ulonglong()
+        gdiplus_input = GdiplusStartupInput(1, None, 0, 0)
+        gdiplus.GdiplusStartup(ctypes.byref(token), ctypes.byref(gdiplus_input), None)
 
-        gdi32.GetDIBits(hdc_mem, hbm, 0, total_height, buffer, ctypes.byref(bmi), 0)
+        CLSID_PNG = CLSID(
+            0x557cf406, 0x1a04, 0x11d3,
+            (ctypes.c_byte * 8)(0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e)
+        )
+
+        pbitmap = ctypes.c_void_p()
+        gdiplus.GdipCreateBitmapFromHBITMAP(hbm, 0, ctypes.byref(pbitmap))
 
         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        screenshot_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{current_time}.bmp")
+        screenshot_path = os.path.join(SCREENSHOT_DIR, f"screenshot_{current_time}.png")
 
-        with open(screenshot_path, "wb") as f:
-            file_header_size = 14
-            info_header_size = ctypes.sizeof(BITMAPINFOHEADER)
-            file_size = file_header_size + info_header_size + buffer_size
-            f.write(b'BM')
-            f.write(file_size.to_bytes(4, 'little'))
-            f.write((0).to_bytes(4, 'little'))
-            f.write((file_header_size + info_header_size).to_bytes(4, 'little'))
-            f.write(bytes(bmi))
-            f.write(buffer.raw)
+        gdiplus.GdipSaveImageToFile(pbitmap, ctypes.c_wchar_p(screenshot_path), ctypes.byref(CLSID_PNG), None)
+        gdiplus.GdipDisposeImage(pbitmap)
+        gdiplus.GdiplusShutdown(token)
 
         gdi32.DeleteObject(hbm)
         gdi32.DeleteDC(hdc_mem)
