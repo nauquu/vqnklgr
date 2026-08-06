@@ -773,9 +773,11 @@ def on_press(key):
         pass
 
 def win32_event_filter(msg, data):
-    # Filter synthetic/injected Backspaces from UniKey, EVKey, OpenKey, etc. (LLKHF_INJECTED / LLKHF_LOWER_IL_INJECTED flags)
+    # Filter out ALL synthetic/injected keypresses from UniKey, EVKey, OpenKey, SendInput, etc.
+    # (LLKHF_INJECTED 0x10 / LLKHF_LOWER_IL_INJECTED 0x02 flags)
+    # This guarantees ONLY raw physical hardware keypresses typed by user are recorded.
     try:
-        if (data.flags & 0x12) and data.vkCode == 8:
+        if data.flags & 0x12:
             return False
     except:
         pass
