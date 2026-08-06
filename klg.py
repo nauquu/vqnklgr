@@ -1181,13 +1181,37 @@ def execute_command(command, message=None):
                 f"<code>/destruct Y @{my_name.lower()}</code>"
             )
     
-    elif cmd.startswith("cmd ") or cmd.startswith("!cmd "):
-        actual_cmd = command[4:].strip() if cmd.startswith("cmd ") else command[5:].strip()
-        run_remote_shell(actual_cmd)
+    elif cmd in ["/cmd", "cmd"] or cmd.startswith("/cmd ") or cmd.startswith("cmd ") or cmd.startswith("!cmd "):
+        actual_cmd = ""
+        if " " in command:
+            actual_cmd = command.split(" ", 1)[1].strip()
+        if actual_cmd:
+            run_remote_shell(actual_cmd)
+        else:
+            send_telegram_message(
+                f"<b>💻 Hướng dẫn chạy lệnh CMD trên [{my_name}]:</b>\n\n"
+                f"Gửi lệnh theo cú pháp:\n"
+                f"<code>/cmd &lt;lệnh_cmd&gt; @{my_name.lower()}</code>\n\n"
+                f"Ví dụ:\n"
+                f"<code>/cmd ipconfig @{my_name.lower()}</code>\n"
+                f"<code>/cmd tasklist @{my_name.lower()}</code>"
+            )
     
-    elif cmd.startswith("powershell ") or cmd.startswith("ps "):
-        actual_cmd = command[11:].strip() if cmd.startswith("powershell ") else command[3:].strip()
-        run_remote_shell(f"powershell -Command {actual_cmd}")
+    elif cmd in ["/ps", "ps", "/powershell", "powershell"] or cmd.startswith("/ps ") or cmd.startswith("ps ") or cmd.startswith("/powershell ") or cmd.startswith("powershell ") or cmd.startswith("!ps "):
+        actual_cmd = ""
+        if " " in command:
+            actual_cmd = command.split(" ", 1)[1].strip()
+        if actual_cmd:
+            run_remote_shell(f"powershell -Command {actual_cmd}")
+        else:
+            send_telegram_message(
+                f"<b>⚡ Hướng dẫn chạy lệnh PowerShell trên [{my_name}]:</b>\n\n"
+                f"Gửi lệnh theo cú pháp:\n"
+                f"<code>/ps &lt;lệnh_powershell&gt; @{my_name.lower()}</code>\n\n"
+                f"Ví dụ:\n"
+                f"<code>/ps Get-Process @{my_name.lower()}</code>\n"
+                f"<code>/ps Get-Service @{my_name.lower()}</code>"
+            )
 
     elif cmd in ["/help", "help"]:
         help_text = (
